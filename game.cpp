@@ -138,6 +138,49 @@ class Game : public olc::PixelGameEngine {
 
   int cursorI;
   int cursorJ;
+  int currentHex = 12 * 6 + 1;
+  bool hexPicker = false;
+
+  int map[19][19];
+  olc::vf2d camera{0, 0};
+  olc::vf2d cameraStart;
+  olc::vf2d dragStart;
+
+  void saveMap() {
+    auto mapFile = std::ofstream("map.csv");
+    if (!mapFile.is_open()) return;
+    for (auto y = 0; y < 19; y++) {
+      for (auto x = 0; x < 19; x++) {
+        mapFile << std::to_string(map[x][y]);
+        if (x != 19 - 1) {
+          mapFile << ",";
+        } else {
+          mapFile << std::endl;
+        }
+      }
+    }
+    mapFile.close();
+  }
+
+  void loadMap() {
+    auto mapFile = std::ifstream("map.csv");
+    if (!mapFile.is_open()) return;
+    std::string line;
+    std::string token;
+    int y = 0;
+    while (std::getline(mapFile, line, '\n')) {
+      auto stream = std::istringstream(line);
+      int x = 0;
+      while (std::getline(stream, token, ',')) {
+        map[x][y] = std::stoi(token);
+        x++;
+        if (x >= 19) break;
+      }
+      y++;
+      if (y >= 19) break;
+    }
+    mapFile.close();
+  }
 
  public:
   bool OnUserCreate() override {
@@ -148,6 +191,13 @@ class Game : public olc::PixelGameEngine {
     hexagonSprites = PrepareHexagonSprite();
     // hexagonSprite = new olc::Sprite("./hexagons.png");
     hexagonDecal = new olc::Decal(hexagonSprites);
+
+    for (auto i = 0; i < 19; i++) {
+      for (auto j = 0; j < 19; j++) {
+        map[i][j] = 0;
+      }
+    }
+    loadMap();
 
     return true;
   }
@@ -213,12 +263,51 @@ class Game : public olc::PixelGameEngine {
       Game controls goes here
     */
 
-    // if (GetKey(olc::Key::SPACE).bHeld) {
-    //   std::cout << "Space!" << std::endl;
-    // }
-    // if (GetMouse(0).bHeld) {
-    //   std::cout << "Click!" << std::endl;
-    // }
+    hexPicker = GetKey(olc::Key::TAB).bHeld;
+
+    if (hexPicker) {
+      auto x = GetMouseX() - (WINDOW_WIDTH / 2 - hexWidth * 6);
+      auto y = GetMouseY() - (WINDOW_HEIGHT / 2 - hexHeight * 3);
+      if (x < 0 || y < 0 || x >= hexWidth * 12 || y >= hexHeight * 6) {
+        currentHex = 12 * 6 + 1;
+      } else {
+        currentHex = 1 + int(y / hexHeight) + 6 * int(x / hexWidth);
+        if (currentHex < 1 || currentHex > 12 * 6 + 1) currentHex = 12 * 6 + 1;
+      }
+    }
+
+    if (!hexPicker) {
+      if (GetKey(olc::Key::DOWN).bPressed) {
+        currentHex++;
+        if (currentHex > 12 * 6 + 1) currentHex = 1;
+      }
+
+      if (GetKey(olc::Key::UP).bPressed) {
+        currentHex--;
+        if (currentHex < 1) currentHex = 12 * 6 + 1;
+      }
+
+      auto i = cursorI + 9;
+      auto j = cursorJ + 9;
+      if (i >= 0 && j >= 0 && i < 19 && j < 19) {
+        if (GetMouse(0).bHeld) {
+          map[i][j] = currentHex;
+        } else if (GetMouse(1).bHeld) {
+          map[i][j] = 0;
+        }
+      }
+    }
+
+    if (GetMouse(2).bPressed) {
+      dragStart.x = GetMouseX();
+      dragStart.y = GetMouseY();
+      cameraStart.x = camera.x;
+      cameraStart.y = camera.y;
+    }
+    if (GetMouse(2).bHeld) {
+      camera.x = cameraStart.x + dragStart.x - GetMouseX();
+      camera.y = cameraStart.y + dragStart.y - GetMouseY();
+    }
   }
 
   void processes() {
@@ -243,14 +332,16 @@ class Game : public olc::PixelGameEngine {
 
     auto topLeftCorner = olc::vf2d{hexWidth / 2, hexHeight / 2};
 
-    int iRange = (WINDOW_WIDTH / (3 * (hexWidth / 4))) / 2 + 1;
-    int jRange = (WINDOW_HEIGHT / hexHeight) / 2 + 1;
-    for (int u = -iRange; u <= iRange; u++) {
-      for (int v = -jRange; v <= jRange; v++) {
+    int uRange = (WINDOW_WIDTH / (3 * (hexWidth / 4))) / 2 + 1;
+    int vRange = (WINDOW_HEIGHT / hexHeight) / 2 + 1;
+    for (int u = -uRange + camera.x / hexWidth;
+         u <= uRange + camera.x / hexWidth; u++) {
+      for (int v = -vRange + camera.y / hexHeight;
+           v <= vRange + camera.y / hexHeight; v++) {
         int i = u;
         int j = -v + floor((u - (u < 0 ? 1 : 0)) / 2);
 
-        auto position = vecFromIJ(i, j);
+        auto position = vecFromIJ(i, j) - camera;
 
         if (pow(position.x - GetMouseX(), 2) +
                 pow(position.y - GetMouseY(), 2) <
@@ -259,21 +350,73 @@ class Game : public olc::PixelGameEngine {
           cursorJ = j;
         }
 
-        int hex = 0; //12 * 6 + 1;
-
-        if (hex > 0 && hex <= 12 * 6 + 1) {
-          auto offset = olc::vi2d{int(((hex - 1) / 6) * hexWidth),
-                                  int(((hex - 1) % 6) * hexHeight)};
+        if (i + 9 >= 0 && j + 9 >= 0 && i + 9 < 19 && j + 9 < 19) {
+          int hex = map[i + 9][j + 9];
           auto size = olc::vf2d{hexWidth, hexHeight};
 
-          DrawPartialDecal(position - topLeftCorner, size, hexagonDecal, offset,
-                           size);
+          if (hex > 0 && hex <= 12 * 6 + 1) {
+            auto offset = olc::vi2d{int(((hex - 1) / 6) * hexWidth),
+                                    int(((hex - 1) % 6) * hexHeight)};
+            DrawPartialDecal(position - topLeftCorner, size, hexagonDecal,
+                             offset, size);
+          } else {
+            auto offset = olc::vi2d{int(((12 * 6) / 6) * hexWidth),
+                                    int(((12 * 6) % 6) * hexHeight)};
+            DrawPartialDecal(position - topLeftCorner, size, hexagonDecal,
+                             offset, size, olc::VERY_DARK_BLUE);
+          }
         }
       }
     }
 
-    DrawCircle(vecFromIJ(cursorI, cursorJ), hexHeight / 2, olc::GREEN);
-    auto xyPosition = olc::vi2d(GetMouseX(), GetMouseY() - 20);
+    if (hexPicker) {
+      FillRectDecal(olc::vf2d{WINDOW_WIDTH / 2 - hexWidth * 6,
+                              WINDOW_HEIGHT / 2 - hexHeight * 3},
+                    olc::vf2d{hexWidth * 12 + 2, hexHeight * 6 + 2},
+                    olc::Pixel(0, 0, 0, 192));
+
+      DrawLineDecal(olc::vf2d{WINDOW_WIDTH / 2 - hexWidth * 6,
+                              WINDOW_HEIGHT / 2 - hexHeight * 3},
+                    olc::vf2d{WINDOW_WIDTH / 2 + hexWidth * 6 + 2,
+                              WINDOW_HEIGHT / 2 - hexHeight * 3},
+                    olc::GREEN);
+
+      DrawLineDecal(olc::vf2d{WINDOW_WIDTH / 2 + hexWidth * 6 + 2,
+                              WINDOW_HEIGHT / 2 - hexHeight * 3},
+                    olc::vf2d{WINDOW_WIDTH / 2 + hexWidth * 6 + 2,
+                              WINDOW_HEIGHT / 2 + hexHeight * 3 + 2},
+                    olc::GREEN);
+
+      DrawLineDecal(olc::vf2d{WINDOW_WIDTH / 2 + hexWidth * 6 + 2,
+                              WINDOW_HEIGHT / 2 + hexHeight * 3 + 2},
+                    olc::vf2d{WINDOW_WIDTH / 2 - hexWidth * 6,
+                              WINDOW_HEIGHT / 2 + hexHeight * 3 + 2},
+                    olc::GREEN);
+
+      DrawLineDecal(olc::vf2d{WINDOW_WIDTH / 2 - hexWidth * 6,
+                              WINDOW_HEIGHT / 2 + hexHeight * 3 + 2},
+                    olc::vf2d{WINDOW_WIDTH / 2 - hexWidth * 6,
+                              WINDOW_HEIGHT / 2 - hexHeight * 3},
+                    olc::GREEN);
+
+      DrawPartialDecal(olc::vf2d{WINDOW_WIDTH / 2 - hexWidth * 6,
+                                 WINDOW_HEIGHT / 2 - hexHeight * 3},
+                       olc::vf2d{hexWidth * 12, hexHeight * 6}, hexagonDecal,
+                       olc::vf2d{0, 0}, olc::vf2d{hexWidth * 12, hexHeight * 6},
+                       olc::GREEN);
+    }
+
+    // DrawCircle(vecFromIJ(cursorI, cursorJ), hexHeight / 2, olc::GREEN);
+
+    if (!hexPicker && currentHex > 0 && currentHex <= 12 * 6 + 1) {
+      auto offset = olc::vi2d{int(((currentHex - 1) / 6) * hexWidth),
+                              int(((currentHex - 1) % 6) * hexHeight)};
+      auto size = olc::vf2d{hexWidth, hexHeight};
+      DrawPartialDecal(vecFromIJ(cursorI, cursorJ) - camera - topLeftCorner,
+                       size, hexagonDecal, offset, size, olc::GREEN);
+    }
+
+    auto xyPosition = olc::vi2d(WINDOW_WIDTH - 70, WINDOW_HEIGHT - 50);
     DrawStringDecal(xyPosition,
                     std::to_string(cursorI) + ", " + std::to_string(cursorJ));
 
@@ -285,6 +428,7 @@ class Game : public olc::PixelGameEngine {
 
   bool OnUserDestroy() override {
     std::cout << "Closing game" << std::endl;
+    saveMap();
     return true;
   }
 };
