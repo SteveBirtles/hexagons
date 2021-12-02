@@ -4,6 +4,8 @@
 const int WINDOW_WIDTH = 1280;
 const int WINDOW_HEIGHT = 720;
 
+const int MAP_SIZE = 100;
+
 class Game : public olc::PixelGameEngine {
  public:
   Game() { sAppName = "Insert Game Name Here"; }
@@ -141,7 +143,7 @@ class Game : public olc::PixelGameEngine {
   int currentHex = 12 * 6 + 1;
   bool hexPicker = false;
 
-  int map[19][19];
+  int map[MAP_SIZE][MAP_SIZE];
   olc::vf2d camera{0, 0};
   olc::vf2d cameraStart;
   olc::vf2d dragStart;
@@ -149,10 +151,10 @@ class Game : public olc::PixelGameEngine {
   void saveMap() {
     auto mapFile = std::ofstream("map.csv");
     if (!mapFile.is_open()) return;
-    for (auto y = 0; y < 19; y++) {
-      for (auto x = 0; x < 19; x++) {
+    for (auto y = 0; y < MAP_SIZE; y++) {
+      for (auto x = 0; x < MAP_SIZE; x++) {
         mapFile << std::to_string(map[x][y]);
-        if (x != 19 - 1) {
+        if (x != MAP_SIZE - 1) {
           mapFile << ",";
         } else {
           mapFile << std::endl;
@@ -174,10 +176,10 @@ class Game : public olc::PixelGameEngine {
       while (std::getline(stream, token, ',')) {
         map[x][y] = std::stoi(token);
         x++;
-        if (x >= 19) break;
+        if (x >= MAP_SIZE) break;
       }
       y++;
-      if (y >= 19) break;
+      if (y >= MAP_SIZE) break;
     }
     mapFile.close();
   }
@@ -192,8 +194,8 @@ class Game : public olc::PixelGameEngine {
     // hexagonSprite = new olc::Sprite("./hexagons.png");
     hexagonDecal = new olc::Decal(hexagonSprites);
 
-    for (auto i = 0; i < 19; i++) {
-      for (auto j = 0; j < 19; j++) {
+    for (auto i = 0; i < MAP_SIZE; i++) {
+      for (auto j = 0; j < MAP_SIZE; j++) {
         map[i][j] = 0;
       }
     }
@@ -287,9 +289,9 @@ class Game : public olc::PixelGameEngine {
         if (currentHex < 1) currentHex = 12 * 6 + 1;
       }
 
-      auto i = cursorI + 9;
-      auto j = cursorJ + 9;
-      if (i >= 0 && j >= 0 && i < 19 && j < 19) {
+      auto i = cursorI + MAP_SIZE / 2;
+      auto j = cursorJ  + MAP_SIZE / 2;
+      if (i >= 0 && j >= 0 && i < MAP_SIZE && j < MAP_SIZE) {
         if (GetMouse(0).bHeld) {
           map[i][j] = currentHex;
         } else if (GetMouse(1).bHeld) {
@@ -332,7 +334,7 @@ class Game : public olc::PixelGameEngine {
 
     auto topLeftCorner = olc::vf2d{hexWidth / 2, hexHeight / 2};
 
-    int uRange = (WINDOW_WIDTH / (3 * (hexWidth / 4))) / 2 + 1;
+    int uRange = (WINDOW_WIDTH / hexWidth) / 2 + 1;
     int vRange = (WINDOW_HEIGHT / hexHeight) / 2 + 1;
     for (int u = -uRange + camera.x / hexWidth;
          u <= uRange + camera.x / hexWidth; u++) {
@@ -350,8 +352,8 @@ class Game : public olc::PixelGameEngine {
           cursorJ = j;
         }
 
-        if (i + 9 >= 0 && j + 9 >= 0 && i + 9 < 19 && j + 9 < 19) {
-          int hex = map[i + 9][j + 9];
+        if (i  + MAP_SIZE / 2 >= 0 && j  + MAP_SIZE / 2 >= 0 && i  + MAP_SIZE / 2 < MAP_SIZE && j  + MAP_SIZE / 2 < MAP_SIZE) {
+          int hex = map[i  + MAP_SIZE / 2][j  + MAP_SIZE / 2];
           auto size = olc::vf2d{hexWidth, hexHeight};
 
           if (hex > 0 && hex <= 12 * 6 + 1) {
